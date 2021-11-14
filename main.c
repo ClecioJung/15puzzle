@@ -1,217 +1,183 @@
-/**
- ------------------------------------------------------------
-    BIBLIOTECAS
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * LIBRARIES
+ *------------------------------------------------------------------------------
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
+#include <time.h>
+#include <stdbool.h>
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
 
-/**
- ------------------------------------------------------------
-    MACROS
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * DEFINITIONS
+ *------------------------------------------------------------------------------
+ */
 
-// Número de lados no retangulo
-#define LADOS           3
+#define SIDES 4
+#define SQUARED_SIDES (SIDES * SIDES)
+#define PIECES (SIDES * SIDES - 1)
 
-// Número de elementos no jogo
-#define MAX_ELEM        (LADOS*LADOS)
+/*
+ *------------------------------------------------------------------------------
+ * GLOBAL VARIABLES
+ *------------------------------------------------------------------------------
+ */
 
-// Número de peças no jogo
-#define PECAS           (MAX_ELEM-1)
+struct termios oldt, newt;
 
-// Setas do teclado
-#define ARROW_UP        584     // arrow up
-#define ARROW_DOWM      592     // arrow down
-#define ARROW_RIGHT     589     // arrow right
-#define ARROW_LEFT      587     // arrow left
+unsigned int board[SQUARED_SIDES];
 
-/**
- ------------------------------------------------------------
-    PROTÓTIPO DE FUNÇÕES
- ------------------------------------------------------------
-**/
+/*
+ *------------------------------------------------------------------------------
+ * FUNCTIONS
+ *------------------------------------------------------------------------------
+ */
 
-void LimpaTela(void);
-void Imprime(void);
-void Jogo_Init(void);
-
-/**
- ------------------------------------------------------------
-    VARIÀVEIS GLOBAIS
- ------------------------------------------------------------
-**/
-
-// Estrutura de dados utilizada para salvar informações do jogo
-unsigned int jogo[MAX_ELEM];
-
-/**
- ------------------------------------------------------------
-    FUNÇÕES
- ------------------------------------------------------------
-**/
-
-// Limpa a tela e imprime cabeçalho
-void LimpaTela(void)
+void printBoard(void)
 {
-    system("cls");
-
-    // Cabeçalho exibido na primeira linha da tela
-    printf(" Jogo do Oito:\n");
-}
-
-// Imprime o passo atual do jogo na tela
-void Imprime(void)
-{
-    // Variáveis locais
-    unsigned int i, j;
-
-    // Limpa a Tela
-    LimpaTela();
-
-    // Solicita ao jogador a próxima jogada
-    printf(" Para jogar, utilize as setas do teclado!\n ");
-
-    // Imprime matriz do jogo
-    for (i = 0; i < MAX_ELEM; i++)
+    for (unsigned int i = 0; i < SQUARED_SIDES; i++)
     {
-        if ((i % LADOS) == 0)
+        if ((i % SIDES) == 0)
         {
-            if (!i) printf("\n ");
-            else printf("|\n ");
-#if (LADOS < 4)
-            for (j = 0; j < LADOS; j++) printf("----");
-#else
-            for (j = 0; j < LADOS; j++) printf("-----");
+            if (i != 0)
+            {
+                putchar('|');
+            }
+            printf("\n ");
+            for (unsigned int j = 0; j < SIDES; j++)
+            {
+                printf("----");
+#if (SIDES > 3)
+                putchar('-');
 #endif
+            }
             printf("-\n |");
         }
-        else printf("|");
-
-#if (LADOS < 4)
-        if (jogo[i] == 0) printf("   ");
-        else printf(" %d ", jogo[i]);
+        else
+        {
+            printf("|");
+        }
+        if (board[i] == 0)
+        {
+            printf("   ");
+#if (SIDES > 3)
+            putchar(' ');
+#endif
+        }
+        else
+        {
+#if (SIDES < 4)
+            printf(" %d ", board[i]);
 #else
-        if (jogo[i] == 0) printf("    ");
-        else printf(" %02d ", jogo[i]);
+            printf(" %02d ", board[i]);
+#endif
+        }
+    }
+    printf("|\n ");
+    for (unsigned int j = 0; j < SIDES; j++)
+    {
+        printf("----");
+#if (SIDES > 3)
+        putchar('-');
 #endif
     }
-
-    printf("|\n ");
-#if (LADOS < 4)
-    for (j = 0; j < LADOS; j++) printf("----");
-#else
-    for (j = 0; j < LADOS; j++) printf("-----");
-#endif
     printf("-\n ");
 }
 
-// Inicializa a matriz do jogo com numeros aleatorios não repetidos
-void Jogo_Init(void)
+void rewindCursor(const unsigned int lines, const unsigned int columns)
 {
-    // Variáveis locais
-    unsigned int i;
-    unsigned int aux;
-    unsigned int numbers[MAX_ELEM];
+    printf("\x1b[%dA", lines);
+    printf("\x1b[%dD", columns);
+}
 
-    // Inicializa indicador de algarismos já usados
-    for (i = 0; i < MAX_ELEM; i++)
-        numbers[i] = 0;
+#define ARROW_UP 'A'
+#define ARROW_DOWM 'B'
+#define ARROW_RIGHT 'C'
+#define ARROW_LEFT 'D'
 
-    // Fornece nova semente ao gerador de numeros aleatorios
+char getArrowKey(void)
+{
+    while (getchar() != '\033')
+    {
+    }
+    getchar();
+    return getchar();
+}
+
+void initBoardGame(void)
+{
+    bool usedNumbers[SQUARED_SIDES];
+    memset(usedNumbers, false, sizeof(usedNumbers));
     srand((unsigned int)time(NULL));
-
-    // Gera numeros aleatorios não repetidos
-    for (i = 0; i < MAX_ELEM; i++)
+    for (unsigned int i = 0; i < SQUARED_SIDES; i++)
     {
-        aux = (rand() % MAX_ELEM);
-
-        // testa se o numero gerado já foi utilizado
-        if (!numbers[aux])
+        unsigned int randomNumber = rand() % SQUARED_SIDES;
+        if (!usedNumbers[randomNumber])
         {
-            jogo[i] = aux;
-            numbers[aux] = 1;
+            board[i] = randomNumber;
+            usedNumbers[randomNumber] = true;
         }
-        else i--;
+        else
+        {
+            i--;
+        }
     }
 }
 
-int get_key()
+unsigned int findEmptyPosition(void)
 {
-    int c = getch(); //first getch() sees the first value
-    switch (c)  //This will only take action if the value is 0 or 224
+    for (unsigned int emptyPosition = 0; emptyPosition < SQUARED_SIDES; emptyPosition++)
     {
-    case 0:
-        return (getch() + 256);  //and this second getch() eats the 2nd value
-    case 224:
-        return (getch() + 512); //and 256 or 512 is added to it and returned.
+        if (!board[emptyPosition])
+        {
+            return emptyPosition;
+        }
     }
-    return c;   //if the value is not 0 or 224 (IE key is not special) normal value is returned
+    return 0;
 }
 
-// Recebe uma jogada do usuário
-void RecebeJogada(void)
+void getPlayerMove(void)
 {
-    // Variáveis locais
-    unsigned int i;
-
-    // Encontra posição vazia
-    for (i = 0; i < MAX_ELEM; i++)
-        if (!jogo[i]) break;
-
-    // Ponto de retorno em caso de erro
-    for (;;)
+    const unsigned int emptyPosition = findEmptyPosition();
+    while (true)
     {
-        // Testa as setas do teclado
-        switch(get_key())
+        switch (getArrowKey())
         {
         case ARROW_UP:
-
-            // Testa erros
-            if (i >= (MAX_ELEM-LADOS)) printf("\n Este movimento e invalido!\n");
-            else
+            if (emptyPosition < (SQUARED_SIDES - SIDES))
             {
-                // Efetua a troca de elementos
-                jogo[i] = jogo[(i+LADOS)];
-                jogo[(i+LADOS)] = 0;
+                board[emptyPosition] = board[(emptyPosition + SIDES)];
+                board[(emptyPosition + SIDES)] = 0;
                 return;
             }
             break;
         case ARROW_DOWM:
-
-            // Testa erros
-            if (i < LADOS) printf("\n Este movimento e invalido!\n");
-            else
+            if (emptyPosition >= SIDES)
             {
-                // Efetua a troca de elementos
-                jogo[i] = jogo[(i-LADOS)];
-                jogo[(i-LADOS)] = 0;
+                board[emptyPosition] = board[(emptyPosition - SIDES)];
+                board[(emptyPosition - SIDES)] = 0;
                 return;
             }
             break;
         case ARROW_RIGHT:
-
-            // Testa erros
-            if ((i%LADOS) == 0) printf("\n Este movimento e invalido!\n");
-            else
+            if ((emptyPosition % SIDES) != 0)
             {
-                // Efetua a troca de elementos
-                jogo[i] = jogo[(i-1)];
-                jogo[(i-1)] = 0;
+                board[emptyPosition] = board[(emptyPosition - 1)];
+                board[(emptyPosition - 1)] = 0;
                 return;
             }
             break;
         case ARROW_LEFT:
-
-            // Testa erros
-            if ((i%LADOS) == (LADOS-1)) printf("\n Este movimento e invalido!\n");
-            else
+            if ((emptyPosition % SIDES) != (SIDES - 1))
             {
-                // Efetua a troca de elementos
-                jogo[i] = jogo[(i+1)];
-                jogo[(i+1)] = 0;
+                board[emptyPosition] = board[(emptyPosition + 1)];
+                board[(emptyPosition + 1)] = 0;
                 return;
             }
             break;
@@ -219,80 +185,57 @@ void RecebeJogada(void)
     }
 }
 
-// Testa se o jogo acabou
-unsigned int Jogo_Continua(void)
+bool continueGame(void)
 {
-    /*  Continua = 1
-        Terminou = 0 */
-
-    // Variáveis locais
-    unsigned int i;
-
-    // Testa se todas as posições estão em ordem, menos a ultima
-    for (i = 0; i < (MAX_ELEM-1); i++)
-        if (jogo[i] != (i+1)) return 1;
-
-    // Não terminou o jogo ainda
-    return 0;
-}
-
-/**
- ------------------------------------------------------------
-    MAIN
- ------------------------------------------------------------
-**/
-
-int main()
-{
-    // Variáveis locais
-    unsigned int jogada;
-    char aux;
-
-    do
+    for (unsigned int i = 0; i < (SQUARED_SIDES - 1); i++)
     {
-        // Inicializa as variaveis
-        Jogo_Init();
-
-        // Reatualiza a impressão da matriz na tela para o usuário
-        Imprime();
-
-        do
+        if (board[i] != (i + 1))
         {
-            // Solicita para que o usuário efetue uma jogada
-            RecebeJogada();
-
-            // Reatualiza a impressão da matriz na tela para o usuário
-            Imprime();
-
-            // Incrementa contador de jogadas
-            jogada++;
+            return true;
         }
-        // Testa se o jogo terminou
-        while (Jogo_Continua());
-
-        // Exibe o resultado do jogo
-        printf("\n\n Parabens! Voce concluiu o jogo!\n\n ");
-
-        // Espera o usuário clicar uma tecla do teclado
-        system("pause");
-
-        // Limpa a Tela
-        LimpaTela();
-
-        // Pergunta se o usuario gostaria de jogar novamente
-        printf("\n Voce gostaria de jogar novamente? (Y/N)\n\n ");
-        scanf("%c", &aux);
-        fflush(stdin);
-        aux = toupper(aux);
     }
-    while (aux == 'Y');
-
-    // Encerra o programa
-    return 0;
+    return false;
 }
 
-/**
- ------------------------------------------------------------
-    FIM
- ------------------------------------------------------------
-**/
+void restoreTerminal(void)
+{
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+}
+
+void configureTerminal(void)
+{
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~ICANON;
+    newt.c_lflag &= ~ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    atexit(restoreTerminal);
+}
+
+/*
+ *------------------------------------------------------------------------------
+ * MAIN
+ *------------------------------------------------------------------------------
+ */
+
+int main(void)
+{
+    printf("Instructions: Use keyboard arrow keys to move the pieces!\n");
+    configureTerminal();
+    initBoardGame();
+    printBoard();
+    while (continueGame())
+    {
+        getPlayerMove();
+        rewindCursor(2 * (SIDES + 1), 0);
+        printBoard();
+    }
+    printf("\nCongratulations! You ended the game!\n");
+    return EXIT_SUCCESS;
+}
+
+/*
+ *------------------------------------------------------------------------------
+ * END
+ *------------------------------------------------------------------------------
+ */
