@@ -9,6 +9,7 @@
     - It is a sliding puzzle having 15 square pieces numbered 1–15 in a frame that is 4 pieces high and 4 pieces wide, leaving one unoccupied piece position;
     - pieces in the same row or column of the open position can be moved by sliding them horizontally or vertically, respectively;
     - The goal of the puzzle is to place the pieces in numerical order;
+- This code is platform dependent and will work only on Linux;
 - It is an terminal interactive application, and its visual is just like this:
 
 ![15 Puzzle](./15puzzle.png)
